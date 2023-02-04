@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-# Inputs: 
-# - volume /data where the files are stored
+# Inputs:
 # - the environment variables processed below (IGNORE_ANNOTATIONS, UPLOAD_URL_PREFIX, NOTIFY_URL_TEMPLATE, CAM_1_Name, CAM_1_HiRes, CAM_1_LoRes)
 # - GCP_PROJECT env variable
 # - /athome/athome.txt to mute the motion detection process based on a condition like: if (ping -c 1 10.6.8.126 || ping -c 1 10.6.8.186) >/dev/null; then echo athome; else echo noonehome; fi > /athome/athome.txt
@@ -19,18 +18,30 @@ import re
 import subprocess
 import time
 import threading
+import secrets
 import urllib.request
 import urllib.parse
 import traceback
 import json
 from collections import namedtuple
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX") # e.g. https://storage.googleapis.com/your-bucket/
+NOTIFY_URL_TEMPLATE = os.getenv("NOTIFY_URL_TEMPLATE") # e.g. "https://www.notifymydevice.com/push?ApiKey=yourapikey&PushTitle=<PTITLE>&PushText=<PTEXT>"
 
 anno_str = os.getenv("IGNORE_ANNOTATIONS")
+
 ANNOTATIONS_TO_IGNORE = [] if not anno_str else anno_str.split(",") # e.g. "Furniture,Table top,Table,Plant,Window blind,Fountain"
+
 #print(ANNOTATIONS_TO_IGNORE)
+
+DATADIR = "/data"
 
 class CamInfo: pass
 
+TAGS = {}
+PICTURES = {}
 CAMINFOS = {}
 for key in os.environ:
     if not key.startswith("CAM_"): continue
@@ -43,9 +54,6 @@ for key in os.environ:
         ci = CamInfo()
         CAMINFOS[camno] = ci
     setattr(ci, skey, value)
-
-UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX") # e.g. https://storage.googleapis.com/your-bucket/
-NOTIFY_URL_TEMPLATE = os.getenv("NOTIFY_URL_TEMPLATE") # e.g. "https://www.notifymydevice.com/push?ApiKey=yourapikey&PushTitle=<PTITLE>&PushText=<PTEXT>"
 
 def are_we_at_home():
     try:
@@ -73,6 +81,7 @@ def get_all_annotations(respstr):
 
               re.append(l["name"])
     except:
+       print("Error while reading annotations:", respstr)
        traceback.print_exc()
     return re
 
@@ -99,15 +108,167 @@ def fetch_url(url):
     except:
         traceback.print_exc()
 
+def slurp(file):
+    with open(file) as f:
+        return f.read()
+
+def add_pic(tag, picname):
+    arr = PICTURES.get(tag)
+    if not arr:
+        arr = []
+        PICTURES[tag] = arr
+    PICTURES[tag].append(picname)
+
+def reindex_files():
+    PICTURES.clear()
+    TAGS.clear()
+    for file in list(glob.glob(DATADIR+'/*.jpg')):
+        try:
+            fn = os.path.basename(file)
+            tags_path = file + ".tags"
+            if os.path.exists(tags_path):
+                resp_str = slurp(tags_path)
+                all_annotations = get_all_annotations(resp_str)
+                tags = get_interesting_annotations(all_annotations)
+                TAGS[fn] = list(tags)
+                if len(tags) == 0:
+                    tags = ["no_objects"]
+                tags.append("w_annotation")
+            else:
+                tags = ["wo_annotation"]
+            tags.append("all")
+            for tag in tags:
+                add_pic(tag, fn)
+        except:
+            pass
+    #print(PICTURES)
+
+class MyServer(BaseHTTPRequestHandler):
+    def serve_motion(self):
+        re =  "<table width='95%'>\n"
+        for camno in CAMINFOS:
+           cam = CAMINFOS[camno]
+           hlsurl0 = None
+           webstreams = ""
+           for a in dir(cam):
+               if not a.startswith("HlsUrl"): continue
+               v = a[6:]
+               url = getattr(cam, a)
+               if v == "Preview":
+                   hlsurl0 = url
+                   continue
+               webstreams += f"<a href='{url}'>{v}</a> "
+           if not hlsurl0: continue
+           re += f"<tr><td width='80%' align='right'><iframe src='{cam.HlsUrl0}' scrolling='no'></iframe></td><td width='20%' align='left'>D{camno}: {cam.Name}<br>{webstreams}</td></tr>\n"
+        re += "</table>\n"
+        return re
+
+    def serve_still(self):
+        p = urllib.parse.urlparse(self.path)
+        qp = urllib.parse.parse_qs(p.query)
+        selected_tag = (qp.get("tag") or [""])[0] or "all"
+        re = "<div>\n"
+        for tag in PICTURES:
+            no = len(PICTURES[tag])
+            tagq = tag.replace(" ", "+")
+            re += f"  <a href='/motion/still.html?tag={tagq}'>{tag} ({no})</a>\n"
+        re += "</div>\n"
+        pix = list(PICTURES[selected_tag])
+        pix.sort(reverse=True)
+        re += "<div class='stills'>\n"
+        for pic in pix:
+            vid1 = ""
+            vid2 = ""
+            if pic in PICTURES["w_annotation"]:
+                url = UPLOAD_URL_PREFIX+pic.replace(".jpg", ".mp4")
+                vid1 = f"<a href='{url}' target='_blank'>"
+                vid2 = "</a>"
+            tags = ", ".join(TAGS.get(pic) or [])
+            re += "<div class='still'>\n"
+            re += f"<div>{vid1}<img src='/motion/{pic}' loading='lazy'>{vid2}</div>\n"
+            re += f"<div>{pic}: {tags}</div>\n"
+            re += "</div>"
+        re += "</div>\n"
+
+        return re
+
+    def serve_pic(self):
+        self.send_response(200)
+        self.send_header("Content-type", "image/jpeg")
+        self.end_headers()
+        fname = os.path.basename(self.path)
+        with open(DATADIR+"/"+fname, "rb") as f:
+            data = f.read()
+            self.wfile.write(data)
+
+    def do_GET(self):
+        if self.path == "/":
+            self.send_response(307)
+            self.send_header("Location", "/motion/")
+            self.end_headers()
+            return
+
+        if self.path.endswith(".jpg") and "?" not in self.path and ".." not in self.path:
+            self.serve_pic()
+            return
+
+        if self.path != "/motion/" and not self.path.startswith("/motion/still.html"):
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+        # header
+        data = "<html><head><title>Motion</title><style>.stills img { width: 100%; height: auto; } .still { margin-top: 10px; margin-right: 10px; } @media only screen and (min-width: 1081px) { .still {width: 45%; float: left;} }</style></head><body>\n"
+        data+= "<h1><a href='/motion/'>Live stream</a> | <a href='/motion/still.html'>Motions</a></h1>\n"
+
+        if self.path == "/motion/":
+            data += self.serve_motion()
+        else:
+            data += self.serve_still()
+
+        # footer
+        data += "</body></html>\n"
+        self.wfile.write(data.encode())
+
 class DeleteOldFiles(threading.Thread):
     def run(self):
         while True:
-            for file in list(glob.glob('/data/*.jpg*')):
+            for file in list(glob.glob(DATADIR+'/*.jpg*')):
                 d = get_age_of_file_in_days(file)
                 if d > 30:
                     os.unlink(file)
-            time.sleep(86400)
+            reindex_files()
+            try:
+                time.sleep(86400)
+            except:
+                return
 
+class WebThread(threading.Thread):
+    def run(self):
+        hostName = "0.0.0.0"
+        serverPort = 8080
+        webServer = ThreadingHTTPServer((hostName, serverPort), MyServer)
+        print("Server started http://%s:%s" % (hostName, serverPort))
+        try:
+            webServer.serve_forever()
+        except KeyboardInterrupt:
+            pass
+
+        webServer.server_close()
+        print("Server stopped.")
+
+class EmailThread(threading.Thread):
+    def run(self):
+        # start the smtp server on localhost:1025
+        foo = EmlServer(('0.0.0.0', 5514), None)
+        try:
+            asyncore.loop()
+        except KeyboardInterrupt:
+            pass
 
 class GrabPicThread(threading.Thread):
     def __init__(self, cinfo, picname):
@@ -132,8 +293,13 @@ class PicThread(threading.Thread):
         all_annotations = get_all_annotations(r.stdout)
         print("all annotations:", all_annotations)
         interesting = get_interesting_annotations(all_annotations)
+        TAGS[self.picname] = interesting
         if len(interesting) <= 0:
+            add_pic("no_objects", self.picname)
             return
+        add_pic("w_annotation", self.picname)
+        for tag in interesting:
+            add_pic(tag, self.picname)
         interesting_str = ", ".join(interesting)
         ptitle = f"{self.cinfo.Name}"
         ptitle_ue = urllib.parse.quote(ptitle)
@@ -165,14 +331,17 @@ class EmlServer(smtpd.SMTPServer):
         self.counters[camno]+= 1
         c = self.counters[camno]
         now = datetime.now().strftime('%Y%m%d%H%M%S')
-        bname = f'{now}-D{camno}-{c:08d}'
+        secret = secrets.token_hex(8)
+        bname = f'{now}-D{camno}-{c:08d}-{secret}'
         picname = f'{bname}.jpg'
         cinfo = CAMINFOS[camno]
         print(picname)
+        add_pic("all", picname)
 
         if not should_do_motion():
             print("Skipping motion detection, grabbing a single image")
             GrabPicThread(cinfo, picname).start()
+            add_pic('wo_annotation', picname)
             return
 
         vidname = f'{bname}.mp4'
@@ -185,13 +354,8 @@ class EmlServer(smtpd.SMTPServer):
 
 def run():
     DeleteOldFiles().start()
-    # start the smtp server on localhost:1025
-    foo = EmlServer(('0.0.0.0', 5514), None)
-    try:
-        asyncore.loop()
-    except KeyboardInterrupt:
-        pass
-
+    WebThread().start()
+    EmailThread().start()
 
 if __name__ == '__main__':
     run()

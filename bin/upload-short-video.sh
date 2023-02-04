@@ -14,7 +14,7 @@ fi
 vidpath="$(mktemp -p $VIDDIR)"
 rm "$vidpath"
 trap "rm $vidpath" EXIT
-timeout 20 ffmpeg -rtsp_transport tcp -t 15 -i "$camurl" -c:v copy  -c:a copy -f mp4 "$vidpath" >/dev/null 2>&1
+ffmpeg -rtsp_transport tcp -t 15 -i "$camurl" -c:v copy  -c:a copy -f mp4 "$vidpath" >/dev/null 2>&1
 
 token=$($d/get-access-token-cached.sh)
 set +x
