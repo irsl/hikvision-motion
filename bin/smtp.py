@@ -159,7 +159,7 @@ class MyServer(BaseHTTPRequestHandler):
                    continue
                webstreams += f"<a href='{url}'>{v}</a> "
            if not hlsurl0: continue
-           re += f"<tr><td width='80%' align='right'><iframe src='{cam.HlsUrl0}' scrolling='no'></iframe></td><td width='20%' align='left'>D{camno}: {cam.Name}<br>{webstreams}</td></tr>\n"
+           re += f"<tr><td width='80%' align='right'><iframe src='{hlsurl0}' scrolling='no'></iframe></td><td width='20%' align='left'>D{camno}: {cam.Name}<br>{webstreams}</td></tr>\n"
         re += "</table>\n"
         return re
 
