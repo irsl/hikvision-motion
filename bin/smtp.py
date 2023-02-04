@@ -294,10 +294,10 @@ class PicThread(threading.Thread):
         print("all annotations:", all_annotations)
         interesting = get_interesting_annotations(all_annotations)
         TAGS[self.picname] = interesting
+        add_pic("w_annotation", self.picname)
         if len(interesting) <= 0:
             add_pic("no_objects", self.picname)
             return
-        add_pic("w_annotation", self.picname)
         for tag in interesting:
             add_pic(tag, self.picname)
         interesting_str = ", ".join(interesting)
