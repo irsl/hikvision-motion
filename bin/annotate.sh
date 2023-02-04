@@ -34,7 +34,7 @@ EOF
 
 trap "rm $annotate_path" EXIT
 
-set+x
+set +x
 curl -X POST --silent \
     -H "Authorization: Bearer $token" \
     -H "x-goog-user-project: $GCP_PROJECT" \
