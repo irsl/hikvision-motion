@@ -133,6 +133,8 @@ def reindex_files():
                 TAGS[fn] = list(tags)
                 if len(tags) == 0:
                     tags = ["no_objects"]
+                else:
+                    tags.append("objects")
                 tags.append("w_annotation")
             else:
                 tags = ["wo_annotation"]
@@ -298,6 +300,7 @@ class PicThread(threading.Thread):
         if len(interesting) <= 0:
             add_pic("no_objects", self.picname)
             return
+        add_pic("objects", self.picname)
         for tag in interesting:
             add_pic(tag, self.picname)
         interesting_str = ", ".join(interesting)
@@ -330,7 +333,7 @@ class EmlServer(smtpd.SMTPServer):
         camno = m.group(1)
         self.counters[camno]+= 1
         c = self.counters[camno]
-        now = datetime.now().strftime('%Y%m%d%H%M%S')
+        now = datetime.now().strftime('%Y%m%d-%H%M%S')
         secret = secrets.token_hex(8)
         bname = f'{now}-D{camno}-{c:08d}-{secret}'
         picname = f'{bname}.jpg'

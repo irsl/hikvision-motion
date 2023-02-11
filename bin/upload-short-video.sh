@@ -18,4 +18,4 @@ ffmpeg -rtsp_transport tcp -t 15 -i "$camurl" -c:v copy  -c:a copy -f mp4 "$vidp
 
 set +x
 token=$($d/get-access-token-cached.sh)
-curl --silent --upload-file - -H "Authorization: Bearer $token" "$vidurl" < $vidpath
+curl --silent --upload-file - -H "Content-type: video/mp4" -H "Authorization: Bearer $token" "$vidurl" < $vidpath
