@@ -26,15 +26,24 @@ import json
 from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-
+MIN_SCORE = float(os.getenv("MIN_SCORE") or "0.7")
 UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX") # e.g. https://storage.googleapis.com/your-bucket/
 NOTIFY_URL_TEMPLATE = os.getenv("NOTIFY_URL_TEMPLATE") # e.g. "https://www.notifymydevice.com/push?ApiKey=yourapikey&PushTitle=<PTITLE>&PushText=<PTEXT>"
 
-anno_str = os.getenv("IGNORE_ANNOTATIONS")
+NIGHT_HOUR_BEGIN_AT = int(os.getenv("NIGHT_HOUR_BEGIN_AT") or "0")
+NIGHT_HOUR_END_AT = int(os.getenv("NIGHT_HOUR_END_AT") or "0")
 
-ANNOTATIONS_TO_IGNORE = [] if not anno_str else anno_str.split(",") # e.g. "Furniture,Table top,Table,Plant,Window blind,Fountain"
-
+ignore_anno_str = os.getenv("IGNORE_ANNOTATIONS")
+ANNOTATIONS_TO_IGNORE = [] if not ignore_anno_str else ignore_anno_str.split(",") # e.g. "Furniture,Table top,Table,Plant,Window blind,Fountain"
 #print(ANNOTATIONS_TO_IGNORE)
+
+prio_anno_str = os.getenv("IMPORTANT_ANNOTATIONS")
+ANNOTATIONS_TO_PRIO = [] if not prio_anno_str else prio_anno_str.split(",") # e.g. "Furniture,Table top,Table,Plant,Window blind,Fountain"
+
+INCLUDE_VIDURL_IN_NOTIFICATION = True
+if os.getenv("DONT_INCLUDE_VIDURL_IN_NOTIFICATION"):
+    INCLUDE_VIDURL_IN_NOTIFICATION = False
+
 
 DATADIR = "/data"
 
@@ -65,21 +74,40 @@ def are_we_at_home():
 
 def get_interesting_annotations(annotations):
     re = []
+    # filtering by score and label importance
     for r in annotations:
-       if r not in ANNOTATIONS_TO_IGNORE:
-          re.append(r)
+       score = r["score"]
+       name = r["name"]
+       if name in ANNOTATIONS_TO_IGNORE:
+          continue
+       if score < MIN_SCORE and name not in ANNOTATIONS_TO_PRIO:
+          continue
+       re.append(name)
+    return re
+
+def get_all_annotations_vision_ai(resp):
+    re = []
+    for r in resp["responses"]:
+       for l in r.get("localizedObjectAnnotations") or []:
+          re.append({"name":l["name"], "score":l["score"]})
+    return re
+
+def get_all_annotations_sentisight(resp):
+    re = []
+    for r in resp:
+       re.append({"name":r["label"], "score":r["score"]})
     return re
 
 def get_all_annotations(respstr):
     re = []
     try:
        resp = json.loads(respstr)
-       for r in resp["responses"]:
-          for l in r.get("localizedObjectAnnotations") or []:
-              s = l["score"]
-              if s < 0.75: continue
-
-              re.append(l["name"])
+       if type(resp) is list:
+          re = get_all_annotations_sentisight(resp)
+       elif resp.get("responses"):
+          re = get_all_annotations_vision_ai(resp)
+       else:
+          raise Exception("Invalid structure")
     except:
        print("Error while reading annotations:", respstr)
        traceback.print_exc()
@@ -89,9 +117,13 @@ def cur_hour():
     return datetime.now().hour
 
 def is_late_hour():
+    if NIGHT_HOUR_BEGIN_AT == 0 and NIGHT_HOUR_END_AT == 0:
+        # feature disabled, decision is made purely based on whether we are at home or not
+        return False
+
     h = cur_hour()
     #print("cur hour", h)
-    return h >= 21 or h <= 7
+    return h >= NIGHT_HOUR_BEGIN_AT or h <= NIGHT_HOUR_END_AT
 
 def should_do_motion():
     athome = are_we_at_home()
@@ -306,7 +338,9 @@ class PicThread(threading.Thread):
         interesting_str = ", ".join(interesting)
         ptitle = f"{self.cinfo.Name}"
         ptitle_ue = urllib.parse.quote(ptitle)
-        ptext = f"{interesting_str}: {self.vidurl}"
+        ptext = f"{interesting_str}"
+        if INCLUDE_VIDURL_IN_NOTIFICATION:
+            ptext += f": {self.vidurl}"
         ptext_ue = urllib.parse.quote(ptext)
         url = NOTIFY_URL_TEMPLATE.replace("<PTITLE>", ptitle_ue).replace('<PTEXT>', ptext_ue)
         fetch_url(url)
