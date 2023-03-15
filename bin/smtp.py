@@ -95,7 +95,7 @@ def get_all_annotations_vision_ai(resp):
 def get_all_annotations_sentisight(resp):
     re = []
     for r in resp:
-       re.append({"name":r["label"], "score":r["score"]})
+       re.append({"name":r["label"], "score":r["score"]/100})
     return re
 
 def get_all_annotations(respstr):
