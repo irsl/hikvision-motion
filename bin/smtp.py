@@ -26,7 +26,8 @@ import json
 from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-MIN_SCORE = float(os.getenv("MIN_SCORE") or "0.7")
+DROP_SCORE = float(os.getenv("DROP_SCORE") or "0.45") # annotations that with score lower than this value are dropped entirely
+MIN_SCORE = float(os.getenv("MIN_SCORE") or "0.7") # to send a notification about, unless it is among IMPORTANT_ANNOTATIONS
 UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX") # e.g. https://storage.googleapis.com/your-bucket/
 NOTIFY_URL_TEMPLATE = os.getenv("NOTIFY_URL_TEMPLATE") # e.g. "https://www.notifymydevice.com/push?ApiKey=yourapikey&PushTitle=<PTITLE>&PushText=<PTEXT>"
 
@@ -79,6 +80,8 @@ def get_interesting_annotations(annotations):
        score = r["score"]
        name = r["name"]
        if name in ANNOTATIONS_TO_IGNORE:
+          continue
+       if score < DROP_SCORE:
           continue
        if score < MIN_SCORE and name not in ANNOTATIONS_TO_PRIO:
           continue
