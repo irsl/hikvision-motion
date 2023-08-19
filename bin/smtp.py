@@ -259,7 +259,7 @@ class MyServer(BaseHTTPRequestHandler):
         self.end_headers()
 
         # header
-        data = "<html><head><title>Motion</title><style>.stills img { width: 100%; height: auto; } .still { margin-top: 10px; margin-right: 10px; } @media only screen and (min-width: 1081px) { .still {width: 45%; float: left;} }</style></head><body>\n"
+        data = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1' /><title>Motion</title><style>div a { font-size: 16px; } .stills img { width: 100%; height: auto; } .still { margin-top: 10px; margin-right: 10px; } @media only screen and (min-width: 1081px) { .still {width: 45%; float: left;} }</style></head><body>\n"      
         data+= "<h1><a href='/motion/'>Live stream</a> | <a href='/motion/still.html'>Motions</a></h1>\n"
 
         if self.path == "/motion/":
