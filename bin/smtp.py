@@ -205,7 +205,7 @@ class MyServer(BaseHTTPRequestHandler):
         qp = urllib.parse.parse_qs(p.query)
         selected_tag = (qp.get("tag") or [""])[0] or "all"
         re = "<div>\n"
-        alltags = PICTURES.keys()
+        alltags = list(PICTURES.keys())
         alltags.sort()
         for tag in alltags:
             no = len(PICTURES[tag])
