@@ -205,7 +205,9 @@ class MyServer(BaseHTTPRequestHandler):
         qp = urllib.parse.parse_qs(p.query)
         selected_tag = (qp.get("tag") or [""])[0] or "all"
         re = "<div>\n"
-        for tag in PICTURES:
+        alltags = keys(PICTURES)
+        alltags.sort()
+        for tag in alltags:
             no = len(PICTURES[tag])
             tagq = tag.replace(" ", "+")
             re += f"  <a href='/motion/still.html?tag={tagq}'>{tag} ({no})</a>\n"
