@@ -153,9 +153,9 @@ def slurp(file):
 def add_pic(tag, picname):
     arr = PICTURES.get(tag)
     if not arr:
-        arr = []
+        arr = set()
         PICTURES[tag] = arr
-    PICTURES[tag].append(picname)
+    PICTURES[tag].add(picname)
 
 def reindex_files():
     PICTURES.clear()
