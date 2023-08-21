@@ -76,6 +76,7 @@ def are_we_at_home():
 
 def get_interesting_annotations(annotations):
     re = []
+    re2 = []
     # filtering by score and label importance
     for r in annotations:
        score = r["score"]
@@ -87,7 +88,8 @@ def get_interesting_annotations(annotations):
        if score < MIN_SCORE and name not in ANNOTATIONS_TO_PRIO:
           continue
        re.append(name)
-    return re
+       re2.append(r)
+    return (re, re2)
 
 def get_all_annotations_vision_ai(resp):
     re = []
@@ -165,7 +167,7 @@ def reindex_files():
             if os.path.exists(tags_path):
                 resp_str = slurp(tags_path)
                 all_annotations = get_all_annotations(resp_str)
-                tags = get_interesting_annotations(all_annotations)
+                (tags, dc) = get_interesting_annotations(all_annotations)
                 TAGS[fn] = list(tags)
                 if len(tags) == 0:
                     tags = ["no_objects"]
@@ -358,7 +360,7 @@ class PicThread(threading.Thread):
         r = subprocess.run(['grab-snapshot-and-annotate.sh', self.cinfo.HiRes, self.picname], stdout=subprocess.PIPE)
         all_annotations = get_all_annotations(r.stdout)
         print("all annotations:", all_annotations)
-        interesting = get_interesting_annotations(all_annotations)
+        (interesting, ia) = get_interesting_annotations(all_annotations)
         TAGS[self.picname] = interesting
         add_pic("w_annotation", self.picname)
         if len(interesting) <= 0:
@@ -376,7 +378,7 @@ class PicThread(threading.Thread):
         ptext_ue = urllib.parse.quote(ptext)
         url = NOTIFY_URL_TEMPLATE.replace("<PTITLE>", ptitle_ue).replace('<PTEXT>', ptext_ue)
         fetch_url(url)
-        draw_annotations(self.picname, interesting)
+        draw_annotations(self.picname, ia)
 
 
 class VidThread(threading.Thread):
