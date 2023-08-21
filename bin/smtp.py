@@ -25,6 +25,7 @@ import traceback
 import json
 from collections import namedtuple
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import cv2 
 
 DROP_SCORE = float(os.getenv("DROP_SCORE") or "0.45") # annotations that with score lower than this value are dropped entirely
 MIN_SCORE = float(os.getenv("MIN_SCORE") or "0.7") # to send a notification about, unless it is among IMPORTANT_ANNOTATIONS
@@ -179,6 +180,32 @@ def reindex_files():
         except:
             pass
     #print(PICTURES)
+
+def draw_annotations(picname, tags):
+    fpath = os.path.join(DATADIR, picname)
+    # Green color in BGR
+    color = (0, 255, 0)
+    thickness = 2
+    changes = False
+    image = None
+    for tag in tags:
+        print("hello", tag)
+        x0 = tag.get("x0")
+        y0 = tag.get("y0")
+        x1 = tag.get("x1")
+        y1 = tag.get("y1")
+        if not x0 and not y0 and not x1 and not y1:
+            continue
+        changes = True
+        s = (x0, y0)
+        e = (x1, y1)
+        if image is None:
+            image = cv2.imread(fpath)
+        image = cv2.rectangle(image, s, e, color, thickness)
+        print("drawn")
+    if not changes:
+        return
+    cv2.imwrite(fpath, image)
 
 class MyServer(BaseHTTPRequestHandler):
     def serve_motion(self):
@@ -349,6 +376,7 @@ class PicThread(threading.Thread):
         ptext_ue = urllib.parse.quote(ptext)
         url = NOTIFY_URL_TEMPLATE.replace("<PTITLE>", ptitle_ue).replace('<PTEXT>', ptext_ue)
         fetch_url(url)
+        draw_annotations(self.picname, interesting)
 
 
 class VidThread(threading.Thread):
