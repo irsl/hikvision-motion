@@ -101,7 +101,10 @@ def get_all_annotations_vision_ai(resp):
 def get_all_annotations_sentisight(resp):
     re = []
     for r in resp:
-       re.append({"name":r["label"], "score":r["score"]/100})
+       d = {"name":r["label"], "score":r["score"]/100}
+       for c in ["x0","y0","x1","y1"]:
+          d[c] = r.get(c)
+       re.append(d)
     return re
 
 def get_all_annotations(respstr):
@@ -191,7 +194,6 @@ def draw_annotations(picname, tags):
     changes = False
     image = None
     for tag in tags:
-        print("hello", tag)
         x0 = tag.get("x0")
         y0 = tag.get("y0")
         x1 = tag.get("x1")
@@ -204,7 +206,6 @@ def draw_annotations(picname, tags):
         if image is None:
             image = cv2.imread(fpath)
         image = cv2.rectangle(image, s, e, color, thickness)
-        print("drawn")
     if not changes:
         return
     cv2.imwrite(fpath, image)
