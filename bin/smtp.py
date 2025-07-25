@@ -9,8 +9,8 @@
 
 from __future__ import print_function
 from datetime import datetime
-import asyncore
-import smtpd
+from aiosmtpd.handlers import Message
+from aiosmtpd.controller import Controller
 import glob
 from collections import defaultdict
 import os
@@ -330,12 +330,13 @@ class WebThread(threading.Thread):
         webServer.server_close()
         print("Server stopped.")
 
-class EmailThread(threading.Thread):
-    def run(self):
-        # start the smtp server on localhost:1025
-        foo = EmlServer(('0.0.0.0', 5514), None)
+class EmailServer:
+    def run_foreground(self):
+        controller = Controller(EmlServer(), port=5514, server_hostname="0.0.0.0")
+        controller.start()
         try:
-            asyncore.loop()
+            while True:
+                time.sleep(60)
         except KeyboardInterrupt:
             pass
 
@@ -391,11 +392,10 @@ class VidThread(threading.Thread):
     def run(self):
         subprocess.run(['upload-short-video.sh',self.cinfo.LoRes, self.vidurl])
 
-class EmlServer(smtpd.SMTPServer):
+class EmlServer(Message):
     counters = defaultdict(int)
-    def process_message(self, peer, mailfrom, rcpttos, data, **kwargs):
-        dstr = data.decode()
-        m = re.search(r'Motion Detected On Channel D(\d+)', dstr)
+    def handle_message(self, message):
+        m = re.search(r'Motion Detected On Channel D(\d+)', message["subject"])
         if not m:
            print("ERROR, unknown subject")
            print(data)
@@ -428,7 +428,7 @@ class EmlServer(smtpd.SMTPServer):
 def run():
     DeleteOldFiles().start()
     WebThread().start()
-    EmailThread().start()
+    EmailServer().run_foreground()
 
 if __name__ == '__main__':
     run()
