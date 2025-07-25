@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o pipefail
 
 if [ -z "$1" ]; then
   echo "Usage: $0 image.jpg"
@@ -15,7 +16,7 @@ tags_path="$input_path.tags"
 if [ -n "$SENTISIGHT_TOKEN" ]; then
     MODEL="Object-detection"
 	set +x
-	if curl -H "X-Auth-token: $SENTISIGHT_TOKEN" --data-binary @"$input_path" -H "Content-Type: application/octet-stream" -X POST "https://platform.sentisight.ai/api/pm-predict/$MODEL" | tee "$tags_path"; then
+	if curl --fail-with-body -H "X-Auth-token: $SENTISIGHT_TOKEN" --data-binary @"$input_path" -H "Content-Type: application/octet-stream" -X POST "https://platform.sentisight.ai/api/pm-predict/$MODEL" | tee "$tags_path"; then
 	   # it worked, no need to fall back
 	   exit 0
 	fi
@@ -48,7 +49,7 @@ EOF
 trap "rm $annotate_path" EXIT
 
 set +x
-curl -X POST --silent \
+curl --fail-with-body -X POST --silent \
     -H "Authorization: Bearer $token" \
     -H "x-goog-user-project: $GCP_PROJECT" \
     -H "Content-Type: application/json; charset=utf-8" \
