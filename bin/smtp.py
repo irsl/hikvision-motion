@@ -332,7 +332,7 @@ class WebThread(threading.Thread):
 
 class EmailServer:
     def run_foreground(self):
-        controller = Controller(EmlServer(), port=5514, server_hostname="0.0.0.0")
+        controller = Controller(EmlServer(), port=5514, hostname="0.0.0.0")
         controller.start()
         try:
             while True:
