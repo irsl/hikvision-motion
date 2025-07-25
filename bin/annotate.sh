@@ -15,12 +15,12 @@ tags_path="$input_path.tags"
 
 if [ -n "$SENTISIGHT_TOKEN" ]; then
     MODEL="Object-detection"
-	set +x
-	if curl --fail-with-body -H "X-Auth-token: $SENTISIGHT_TOKEN" --data-binary @"$input_path" -H "Content-Type: application/octet-stream" -X POST "https://platform.sentisight.ai/api/pm-predict/$MODEL" | tee "$tags_path"; then
+	if curl --fail-with-body -H "X-Auth-token: $SENTISIGHT_TOKEN" --data-binary @"$input_path" -H "Content-Type: application/octet-stream" -X POST "https://platform.sentisight.ai/api/pm-predict/$MODEL" > "$tags_path"; then
 	   # it worked, no need to fall back
+	   cat "$tags_path"
 	   exit 0
 	fi
-	set -x
+	>&2 cat "$tags_path"
 fi
 
 # falling back to Google Vision AI
@@ -48,7 +48,6 @@ EOF
 
 trap "rm $annotate_path" EXIT
 
-set +x
 curl --fail-with-body -X POST --silent \
     -H "Authorization: Bearer $token" \
     -H "x-goog-user-project: $GCP_PROJECT" \
